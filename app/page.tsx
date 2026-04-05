@@ -1,65 +1,84 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useCallback, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { Visualizer } from '@/components/Visualizer';
+import { TypingStage } from '@/components/TypingStage';
+import { ControlBar } from '@/components/ControlBar';
+import { ShareButton } from '@/components/ShareButton';
+import { useAudioEngine } from '@/hooks/useAudioEngine';
+import { useTypingCapture } from '@/hooks/useTypingCapture';
+import type { KeystrokeEvent } from '@/types';
+
+export default function HomePage() {
+  const { settings, playKeystroke, updateSettings } = useAudioEngine();
+  const visualizerCallbackRef = useRef<((intervalMs: number) => void) | null>(null);
+
+  const handleRegisterVisualizer = useCallback((fn: (intervalMs: number) => void) => {
+    visualizerCallbackRef.current = fn;
+  }, []);
+
+  // Single onKeystroke handler: audio + visualizer from the same event object
+  const handleKeystroke = useCallback(
+    async (event: KeystrokeEvent) => {
+      await playKeystroke(event);
+      visualizerCallbackRef.current?.(event.intervalMs);
+    },
+    [playKeystroke]
+  );
+
+  // Single source of truth for session state — lifted up from TypingStage
+  const { session, handleKeyDown, handleChange, reset } = useTypingCapture(handleKeystroke);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="relative min-h-screen flex flex-col items-center justify-center px-4 py-16 overflow-hidden">
+      <Visualizer onRegisterCallback={handleRegisterVisualizer} />
+
+      <div className="fixed inset-0 pointer-events-none z-0" aria-hidden="true">
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-500/8 rounded-full blur-3xl animate-pulse-glow" />
+        <div className="absolute top-2/3 left-1/3 w-64 h-64 bg-purple-500/6 rounded-full blur-3xl animate-pulse-glow" style={{ animationDelay: '1.5s' }} />
+      </div>
+
+      <motion.header
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7 }}
+        className="relative z-10 text-center mb-12"
+      >
+        <h1 className="text-5xl font-bold tracking-tight bg-gradient-to-r from-cyan-300 via-white to-purple-300 bg-clip-text text-transparent mb-3">
+          Keyscape
+        </h1>
+        <p className="text-white/40 text-sm tracking-widest uppercase">
+          your typing is music
+        </p>
+        <div className="mt-4 flex justify-center gap-6 text-white/20 text-xs font-mono">
+          <span>speed → pitch</span>
+          <span className="text-white/10">·</span>
+          <span>rhythm → tempo</span>
+          <span className="text-white/10">·</span>
+          <span>style → timbre</span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </motion.header>
+
+      <TypingStage
+        onKeyDown={handleKeyDown}
+        onChange={handleChange}
+        onReset={reset}
+        eventCount={session.events.length}
+      />
+
+      <ControlBar settings={settings} onChange={updateSettings} />
+
+      <ShareButton session={session} />
+
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1, delay: 1.2 }}
+        className="relative z-10 mt-16 text-white/15 text-xs text-center font-mono"
+      >
+        Each person&apos;s typing creates a unique musical fingerprint
+      </motion.p>
+    </main>
   );
 }
